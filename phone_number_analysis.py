@@ -11,6 +11,9 @@ from pyspark import SparkContext, SparkConf
 from pyspark.sql import SQLContext
 from pyspark.sql.types import StructType, StructField, StringType, ArrayType
 
+# just trying wheter a other serializer would make a difference
+from pyspark.serializers import MarshalSerializer
+
 import requests
 from requests_file import FileAdapter
 
@@ -41,7 +44,7 @@ class PhoneNumbers:
         self.partitions = partitions
 
     def run(self):
-        sc = SparkContext(appName=self.name)
+        sc = SparkContext(appName=self.name, serializer=MarshalSerializer())
         sqlc = SQLContext(sparkContext=sc)
 
         self.failed_record_parse = sc.accumulator(0)

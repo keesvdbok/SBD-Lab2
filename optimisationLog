@@ -1,0 +1,8 @@
+this is a log file to document attempted optimizations.
+
+Hypothesis:
+Pyspark usses pickle to serialize object for transfer. some sources claim
+the cpickle serializer (a pickle implemetation is faster). We propse to change
+the default serializer and check whether this would improve per performance.
+
+Results: 
