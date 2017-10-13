@@ -64,7 +64,7 @@ class PhoneNumbers:
         self.log(sc, "Failed parses: {}".format(self.failed_record_parse.value))
 
     def log(self, sc, message, level="warn"):
-        log = sc._jvm.org.apache.log4j.LogManager.getLogger(self.name) 
+        log = sc._jvm.org.apache.log4j.LogManager.getLogger(self.name)
         if level == "info":
             log.info(message)
         elif level == "warn":
@@ -110,7 +110,7 @@ class PhoneNumbers:
             print("Error ocurred loading file: {}".format(input_file))
             self.failed_segment.add(1)
             return None
-            
+
     def process_records(self, stream):
         try:
             for rec in ArchiveIterator(stream):
@@ -131,12 +131,13 @@ class PhoneNumbers:
 
     def find_phone_numbers(self, content):
         content = content.read().decode('utf-8')
+        # this line and the following iterate twice over the same data !
         numbers = self.phone_nl_filter.findall(content)
         nums_filt = {re.sub(self.zeroplus_filter, "+",
                             re.sub(self.replace_filter, "", num))
                      for num in numbers}
         for num in nums_filt:
-            yield num 
+            yield num
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Phone number analysis using Apache Spark")
