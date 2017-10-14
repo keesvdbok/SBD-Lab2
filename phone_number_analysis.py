@@ -16,6 +16,7 @@ from requests_file import FileAdapter
 
 import boto3
 import botocore
+from boto3.s3.transfer import TransferConfig
 
 import re
 
@@ -95,7 +96,9 @@ class PhoneNumbers:
             bucketname = s3match.group(1)
             path = s3match.group(2)
             warctemp = TemporaryFile(mode='w+b')
-            s3client.download_fileobj(bucketname, path, warctemp)
+            #standard concurrency is set to 10 lets double it
+            config = TransferConfig(max_concurrency = 20)
+            s3client.download_fileobj(bucketname, path, warctemp, Config=config)
             warctemp.seek(0)
             return warctemp
         except BaseException as e:
