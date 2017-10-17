@@ -8,8 +8,9 @@ from tempfile import TemporaryFile
 import argparse
 
 from pyspark import SparkContext, SparkConf
-from pyspark.sql import SQLContext
+from pyspark.sql import SQLContext, Row
 from pyspark.sql.types import StructType, StructField, StringType, ArrayType
+from pyspark.sql.functions import collect_list
 
 import requests
 from requests_file import FileAdapter
@@ -34,6 +35,11 @@ class PhoneNumbers:
         StructField("urls", ArrayType(StringType()), True)
         ])
 
+    intermediate_schema = StructType([
+        StructField("num", StringType(), True),
+        StructField("urls", StringType(), True)
+        ])
+
     def __init__(self, input_file, output_dir, name, partitions=None):
         self.name = name
         self.input_file = input_file
@@ -51,15 +57,26 @@ class PhoneNumbers:
             self.partitions = sc.defaultParallelism
 
         input_data = sc.textFile(self.input_file, minPartitions=self.partitions)
-        phone_numbers = input_data.flatMap(self.process_warcs)
 
-        phone_numb_agg_web = phone_numbers.groupByKey().mapValues(list)
+        #input_data_df = sqlc.createDataFrame(input_data, schema=StringType())
+        #phone_numbers = input_data.flatMap(self.process_warcs).toDF(["URI"])
+        phone_numbers = \
+                input_data.flatMap(self.process_warcs) \
+                .toDF(schema=self.intermediate_schema) \
+                .groupBy("num").agg(collect_list("urls").alias("urls"))
+        #print("Number of URIs: "+str(phone_numbers.count()))
+        #phone_numb_agg_web = phone_numbers.groupByKey().mapValues(list)
+        #print("First 2 elements: " +str(phone_numbers.head(2)))
+        #print(phone_numbers.collect())
 
-        sqlc.createDataFrame(phone_numb_agg_web, schema=self.output_schema) \
+        print("Number of Phonenumbers: "+ str(phone_numbers.count()))
+        phone_numbers.printSchema()
+
+        phone_numbers \
                 .write \
                 .format("parquet") \
                 .save(self.output_dir)
-
+        
         self.log(sc, "Failed segments: {}".format(self.failed_segment.value))
         self.log(sc, "Failed parses: {}".format(self.failed_record_parse.value))
 
@@ -114,12 +131,12 @@ class PhoneNumbers:
     def process_records(self, stream):
         try:
             for rec in ArchiveIterator(stream):
-                uri = rec.rec_headers.get_header("WARC-Target-URI")
+                uri = str(rec.rec_headers.get_header("WARC-Target-URI"))
                 if uri is None:
                     continue
                 try:
                     for num in self.find_phone_numbers(rec.content_stream()):
-                        yield (num, uri)
+                        yield (num, uri) #changed yield to return
                 except UnicodeDecodeError as e:
                     print("Error: {}".format(e))
                     self.failed_record_parse.add(1)
