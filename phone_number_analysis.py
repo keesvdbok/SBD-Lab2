@@ -69,14 +69,14 @@ class PhoneNumbers:
         #print("First 2 elements: " +str(phone_numbers.head(2)))
         #print(phone_numbers.collect())
 
-        print("Number of Phonenumbers: "+ str(phone_numbers.count()))
-        phone_numbers.printSchema()
+        #print("Number of Phonenumbers: "+ str(phone_numbers.count()))
+        #phone_numbers.printSchema()
 
         phone_numbers \
                 .write \
                 .format("parquet") \
                 .save(self.output_dir)
-        
+
         self.log(sc, "Failed segments: {}".format(self.failed_segment.value))
         self.log(sc, "Failed parses: {}".format(self.failed_record_parse.value))
 
