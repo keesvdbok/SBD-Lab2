@@ -1,4 +1,9 @@
-#!/usr/bin/env Python3
+#!/usr/bin/python
+#-*- coding: utf8 -*-
+
+#need findspark to find pyspark easily
+#import findspark
+#findspark.init()
 
 from warcio.archiveiterator import ArchiveIterator
 from warcio.recordloader import ArchiveLoadFailed
@@ -8,9 +13,8 @@ from tempfile import TemporaryFile
 import argparse
 
 from pyspark import SparkContext, SparkConf
-from pyspark.sql import SQLContext, Row
+from pyspark.sql import SQLContext
 from pyspark.sql.types import StructType, StructField, StringType, ArrayType
-from pyspark.sql.functions import collect_list
 
 import requests
 from requests_file import FileAdapter
@@ -35,11 +39,6 @@ class PhoneNumbers:
         StructField("urls", ArrayType(StringType()), True)
         ])
 
-    intermediate_schema = StructType([
-        StructField("num", StringType(), True),
-        StructField("urls", StringType(), True)
-        ])
-
     def __init__(self, input_file, output_dir, name, partitions=None):
         self.name = name
         self.input_file = input_file
@@ -57,26 +56,17 @@ class PhoneNumbers:
             self.partitions = sc.defaultParallelism
 
         input_data = sc.textFile(self.input_file, minPartitions=self.partitions)
+        phone_numbers = input_data.flatMap(self.process_warcs)
 
-        #input_data_df = sqlc.createDataFrame(input_data, schema=StringType())
-        #phone_numbers = input_data.flatMap(self.process_warcs).toDF(["URI"])
-        phone_numbers = \
-                input_data.flatMap(self.process_warcs) \
-                .toDF(schema=self.intermediate_schema) \
-                .groupBy("num").agg(collect_list("urls").alias("urls"))
-        #print("Number of URIs: "+str(phone_numbers.count()))
         #phone_numb_agg_web = phone_numbers.groupByKey().mapValues(list)
-        #print("First 2 elements: " +str(phone_numbers.head(2)))
-        #print(phone_numbers.collect())
+        phone_numb_agg_web = phone_numbers.aggregateByKey( (), lambda elem,val:(val,elem),lambda elem1,elem2:(elem2,elem1)).mapValues(list)
 
-        print("Number of Phonenumbers: "+ str(phone_numbers.count()))
-        phone_numbers.printSchema()
-
-        phone_numbers \
+        sqlc.createDataFrame(phone_numb_agg_web, schema=self.output_schema) \
                 .write \
                 .format("parquet") \
                 .save(self.output_dir)
-        
+
+
         self.log(sc, "Failed segments: {}".format(self.failed_segment.value))
         self.log(sc, "Failed parses: {}".format(self.failed_record_parse.value))
 
@@ -131,12 +121,12 @@ class PhoneNumbers:
     def process_records(self, stream):
         try:
             for rec in ArchiveIterator(stream):
-                uri = str(rec.rec_headers.get_header("WARC-Target-URI"))
+                uri = rec.rec_headers.get_header("WARC-Target-URI")
                 if uri is None:
                     continue
                 try:
                     for num in self.find_phone_numbers(rec.content_stream()):
-                        yield (num, uri) #changed yield to return
+                        yield (num, uri)
                 except UnicodeDecodeError as e:
                     print("Error: {}".format(e))
                     self.failed_record_parse.add(1)
@@ -148,7 +138,6 @@ class PhoneNumbers:
 
     def find_phone_numbers(self, content):
         content = content.read().decode('utf-8')
-        # this line and the following iterate twice over the same data !
         numbers = self.phone_nl_filter.findall(content)
         nums_filt = {re.sub(self.zeroplus_filter, "+",
                             re.sub(self.replace_filter, "", num))
